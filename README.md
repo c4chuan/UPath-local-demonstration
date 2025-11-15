@@ -4,7 +4,7 @@
 
 - 输入并验证 API-Key  
 - 从 UPath 后端获取导师场景配置（示例固定为 `Math` 场景）  
-- 使用火山引擎 RTC SDK 加入音视频房间  
+- 使用浏览器音视频能力与第三方 RTC SDK 加入音视频房间  
 - 启动本地麦克风与屏幕共享  
 - 通过 UPath API 唤醒 / 结束 AI 导师语音对话  
 
@@ -14,14 +14,14 @@
 
 ## 技术栈与核心依赖
 
-- **框架**：Vue 3
-- **构建工具**：Vite
-- **实时音视频**：`@volcengine/rtc`
+- **框架**：Vue 3  
+- **构建工具**：Vite  
+- **实时音视频**：浏览器音视频能力 + 第三方 RTC SDK  
 - **后端 API**：直连生产环境 `https://api.upath.cn`
 
 主要代码文件：
 
-- `src/App.vue`：单页演示界面（API-Key 输入、状态展示、启动/结束对话按钮）
+- `src/App.vue`：单页演示界面（API-Key 输入、状态展示、启动/结束对话按钮）  
 - `src/services/api.js`：封装对 UPath 后端的 API 调用（`getScenes` / `startVoiceChat` / `stopVoiceChat` 等）
 
 ---
@@ -43,7 +43,7 @@
      3. 启动本地麦克风采集  
      4. 调用浏览器的 `getDisplayMedia` 接口，打开「选择窗口/屏幕」弹窗并启动屏幕共享  
      5. 调用 `/api/aigc/proxy?Action=StartVoiceChat` 唤醒 AI 导师语音对话  
-   - 成功后页面会显示：
+   - 成功后页面会显示：  
      - 连接状态：已连接  
      - 当前场景：返回的场景名称或 ID  
      - 屏幕共享：已开启 / 未开启  
@@ -112,39 +112,39 @@ npm run build
    - 在你自己的组件中，参考 `src/App.vue` 的顺序：
      1. 验证并保存 API-Key  
      2. 调用 `getScenes` 获取场景配置  
-     3. 使用 `@volcengine/rtc` 创建引擎并加入房间  
+     3. 使用 RTC SDK 创建引擎并加入房间  
      4. 启动音频采集与屏幕共享  
      5. 调用 `startVoiceChat` / `stopVoiceChat` 控制 AI 导师对话  
 
 3. **替换场景 / UI**
-   - 将示例中固定的 `DEFAULT_SCENE_NAME = 'Math'` 替换为你自己的场景名称  
-   - 根据你的产品设计，替换或扩展页面样式与交互（示例仅提供最小可运行版本）  
+   - 将示例中固定的 `DEFAULT_SCENE_NAME = 'Math'` 替换为你自己的场景名称。  
+   - 根据你的产品设计，替换或扩展页面样式与交互（示例仅提供最小可运行版本）。  
 
 ---
 
 ## 常见问题
 
 1. **启动对话时没有弹出屏幕共享窗口？**
-   - 确认浏览器是否支持 `navigator.mediaDevices.getDisplayMedia`（建议使用最新版 Chrome / Edge）  
-   - 检查是否误点了「拒绝」或在地址栏关闭了屏幕共享权限  
-   - 可以打开浏览器 DevTools 控制台查看是否有「浏览器不支持屏幕共享」相关报错
+   - 确认浏览器是否支持 `navigator.mediaDevices.getDisplayMedia`（建议使用最新版 Chrome / Edge）。  
+   - 检查是否误点了「拒绝」或在地址栏关闭了屏幕共享权限。  
+   - 可以打开浏览器 DevTools 控制台查看是否有「浏览器不支持屏幕共享」相关报错。  
 
 2. **API-Key 验证失败？**
-   - 检查是否从 UPath 控制台完整复制了 Key（长度通常较长）  
-   - 确认该 Key 是否有访问对应场景（如 `Math`）的权限  
-   - 观察网络面板中 `/api/aigc/getScenes` 请求的响应内容，查看错误信息
+   - 检查是否从 UPath 控制台完整复制了 Key（长度通常较长）。  
+   - 确认该 Key 是否有访问对应场景（如 `Math`）的权限。  
+   - 观察网络面板中 `/api/aigc/getScenes` 请求的响应内容，查看错误信息。
 
 3. **RTC 加入房间失败或没有声音？**
-   - 确认本机麦克风可用且浏览器已授予麦克风权限  
-   - 检查返回的 RTC 配置是否完整（AppId / RoomId / UserId / Token）  
-   - 若在公司网络环境中，可能需要额外放通 RTC 相关端口
+   - 确认本机麦克风可用且浏览器已授予麦克风权限。  
+   - 检查返回的 RTC 配置是否完整（AppId / RoomId / UserId / Token）。  
+   - 若在公司网络环境中，可能需要额外放通 RTC 相关端口。
 
 ---
 
 ## 注意事项
 
 - 本示例**直接连线上生产环境 API**，请勿在不可信环境中泄露你的 API-Key。  
-- 建议在真实业务项目中增加：
+- 建议在真实业务项目中增加：  
   - API-Key 管理与权限控制  
   - 更完善的错误提示与重试机制  
   - 监控与埋点，用于追踪 AI 导师对话质量与调用量  
