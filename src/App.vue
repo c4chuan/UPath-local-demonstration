@@ -137,6 +137,9 @@ const connectionError = ref('')
 const currentScene = ref(null)
 const rtcEngine = ref(null)
 
+// 房间ID（用于 aigc 接口）
+const roomId = ref('')
+
 const currentSceneName = computed(() => {
   if (!currentScene.value) return ''
   return currentScene.value.scene?.name || currentScene.value.scene?.id || ''
@@ -221,9 +224,13 @@ const startConversation = async () => {
   connectionError.value = ''
   statusMessage.value = '正在获取场景配置...'
 
+  // 生成业务侧 RoomId（格式：room_时间戳）
+  roomId.value = `room_${Date.now()}`
+  console.log('业务侧 RoomId:', roomId.value)
+
   try {
     // 1. 获取场景（Math）
-    const scenesData = await apiService.getScenes(apiKey, DEFAULT_SCENE_NAME)
+    const scenesData = await apiService.getScenes(apiKey, DEFAULT_SCENE_NAME, roomId.value)
     const scenes = scenesData?.Result?.scenes || []
     if (!scenes.length) {
       throw new Error('未找到可用的场景配置，请检查 API-Key 是否有 Math 场景权限。')
@@ -279,7 +286,8 @@ const startConversation = async () => {
 
     // 6. 通知后端启动 AI 语音对话
     statusMessage.value = '正在唤醒 AI 导师...'
-    await apiService.startVoiceChat(apiKey, currentScene.value.scene.id)
+    console.log('启动 AIGC 对话，RoomId:', roomId.value)
+    await apiService.startVoiceChat(apiKey, currentScene.value.scene.id, roomId.value)
 
     isConnected.value = true
     statusMessage.value = 'AI 导师已连接，可以开始说话。'
@@ -309,7 +317,8 @@ const stopConversation = async () => {
   try {
     if (apiKey && currentScene.value?.scene?.id) {
       try {
-        await apiService.stopVoiceChat(apiKey, currentScene.value.scene.id)
+        console.log('停止 AIGC 对话，RoomId:', roomId.value)
+        await apiService.stopVoiceChat(apiKey, currentScene.value.scene.id, roomId.value)
       } catch (err) {
         console.warn('停止语音对话时出现问题，但继续清理 RTC：', err)
       }

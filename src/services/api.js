@@ -55,10 +55,13 @@ async function handleResponse(response) {
 
 export const apiService = {
   // 通过场景名称获取场景与 RTC 配置
-  async getScenes(apiKey, sceneName) {
+  async getScenes(apiKey, sceneName, roomId) {
     const body = {}
     if (sceneName) {
       body.scene_name = sceneName
+    }
+    if (roomId) {
+      body.RoomId = roomId
     }
 
     const resp = await fetch(`${API_BASE_URL}/api/aigc/getScenes`, {
@@ -84,26 +87,36 @@ export const apiService = {
   },
 
   // 启动语音对话
-  async startVoiceChat(apiKey, sceneId) {
+  async startVoiceChat(apiKey, sceneId, roomId) {
+    const body = { SceneID: sceneId }
+    if (roomId) {
+      body.inputParams = { RoomId: roomId }
+    }
+
     const resp = await fetch(
       `${API_BASE_URL}/api/aigc/proxy?Action=StartVoiceChat`,
       {
         method: 'POST',
         headers: buildHeaders(apiKey),
-        body: JSON.stringify({ SceneID: sceneId })
+        body: JSON.stringify(body)
       }
     )
     return handleResponse(resp)
   },
 
   // 停止语音对话
-  async stopVoiceChat(apiKey, sceneId) {
+  async stopVoiceChat(apiKey, sceneId, roomId) {
+    const body = { SceneID: sceneId }
+    if (roomId) {
+      body.inputParams = { RoomId: roomId }
+    }
+
     const resp = await fetch(
       `${API_BASE_URL}/api/aigc/proxy?Action=StopVoiceChat`,
       {
         method: 'POST',
         headers: buildHeaders(apiKey),
-        body: JSON.stringify({ SceneID: sceneId })
+        body: JSON.stringify(body)
       }
     )
     return handleResponse(resp)
