@@ -81,6 +81,12 @@
           </div>
         </div>
 
+        <!-- 静音警告提示 -->
+        <div v-if="showSilenceWarning" class="silence-warning">
+          <span class="warning-icon">!</span>
+          <span>长时间未检测到语音，对话将在 {{ formatSilenceCountdown }} 后自动结束</span>
+        </div>
+
         <div class="button-row">
           <button
             class="btn primary large"
@@ -140,9 +146,27 @@ const rtcEngine = ref(null)
 // 房间ID（用于 aigc 接口）
 const roomId = ref('')
 
+// 静音检测常量（调试模式：2分钟超时，最后30秒警告）
+const SILENCE_THRESHOLD = 25      // 音量阈值（0-255，低于此值视为静音）
+const SILENCE_TIMEOUT = 120       // 静音超时时间（秒）= 2分钟（调试用，生产环境改为300）
+const WARNING_THRESHOLD = 30      // 最后30秒显示警告（调试用，生产环境改为60）
+
+// 静音倒计时状态
+const silenceTimer = ref(null)
+const silenceCountdown = ref(SILENCE_TIMEOUT)
+const isSilent = ref(false)
+const showSilenceWarning = ref(false)
+
 const currentSceneName = computed(() => {
   if (!currentScene.value) return ''
   return currentScene.value.scene?.name || currentScene.value.scene?.id || ''
+})
+
+// 格式化倒计时显示
+const formatSilenceCountdown = computed(() => {
+  const minutes = Math.floor(silenceCountdown.value / 60)
+  const seconds = silenceCountdown.value % 60
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
 })
 
 // 从本地恢复 API-Key
@@ -153,6 +177,8 @@ onMounted(() => {
     apiKeySaved.value = true
     statusMessage.value = '检测到已保存的 API-Key，可直接启动对话。'
   }
+  // 注册页面关闭监听器
+  window.addEventListener('pagehide', handlePageHide)
 })
 
 // 保存并验证 API-Key
@@ -196,6 +222,105 @@ const handleClearKey = () => {
   apiKeyInput.value = ''
   statusMessage.value = '已清除本地保存的 API-Key。'
 }
+
+// ========== 静音检测功能 ==========
+
+// 处理音频属性报告
+const handleAudioPropertiesReport = (infos) => {
+  if (!isConnected.value) return
+  const micInfo = infos.find(info => info.streamIndex === 0)
+  const audioLevel = micInfo?.audioPropertiesInfo?.linearVolume || 0
+
+  // 调试日志：每次回调都打印音量（可注释掉减少日志量）
+  console.log('[静音检测] 音量:', audioLevel, '阈值:', SILENCE_THRESHOLD, '静音状态:', isSilent.value)
+
+  if (audioLevel > SILENCE_THRESHOLD) {
+    if (isSilent.value) {
+      console.log('[静音检测] 检测到说话，重置倒计时')
+    }
+    resetSilenceTimer()
+  } else if (!isSilent.value) {
+    console.log('[静音检测] 开始静音，启动倒计时')
+    startSilenceTimer()
+  }
+}
+
+// 启动静音倒计时
+const startSilenceTimer = () => {
+  isSilent.value = true
+  silenceCountdown.value = SILENCE_TIMEOUT
+  if (silenceTimer.value) return
+
+  console.log('[静音检测] 倒计时启动，总时长:', SILENCE_TIMEOUT, '秒')
+
+  silenceTimer.value = setInterval(() => {
+    silenceCountdown.value--
+
+    // 每10秒打印一次倒计时
+    if (silenceCountdown.value % 10 === 0) {
+      console.log('[静音检测] 倒计时:', silenceCountdown.value, '秒')
+    }
+
+    if (silenceCountdown.value <= WARNING_THRESHOLD && !showSilenceWarning.value) {
+      console.log('[静音检测] 进入警告阶段，剩余:', silenceCountdown.value, '秒')
+      showSilenceWarning.value = true
+    }
+    if (silenceCountdown.value <= 0) {
+      console.log('[静音检测] 倒计时结束，自动结束对话')
+      handleSilenceTimeout()
+    }
+  }, 1000)
+}
+
+// 重置静音倒计时
+const resetSilenceTimer = () => {
+  const wasWarning = showSilenceWarning.value
+  isSilent.value = false
+  silenceCountdown.value = SILENCE_TIMEOUT
+  showSilenceWarning.value = false
+  if (silenceTimer.value) {
+    clearInterval(silenceTimer.value)
+    silenceTimer.value = null
+    console.log('[静音检测] 倒计时已重置', wasWarning ? '（从警告状态恢复）' : '')
+  }
+}
+
+// 静音超时处理
+const handleSilenceTimeout = async () => {
+  console.log('[静音检测] 超时！自动结束对话')
+  if (silenceTimer.value) {
+    clearInterval(silenceTimer.value)
+    silenceTimer.value = null
+  }
+  alert('由于长时间未检测到语音，对话已自动结束')
+  await stopConversation()
+}
+
+// ========== 页面关闭处理 ==========
+
+// 处理页面卸载（关闭标签页或浏览器时自动结束对话）
+const handlePageHide = (event) => {
+  console.log('pagehide triggered, persisted:', event.persisted, 'isConnected:', isConnected.value)
+  if (event.persisted) return
+  if (isConnected.value && currentScene.value) {
+    const url = `https://api.upath.cn/api/aigc/proxy?Action=StopVoiceChat`
+    const body = JSON.stringify({
+      SceneID: currentScene.value.scene.id,
+      inputParams: { RoomId: roomId.value }
+    })
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Api-Key': apiKeyManager.getApiKey() || ''
+      },
+      body,
+      keepalive: true
+    }).catch(() => {})
+  }
+}
+
+// ========================================
 
 // 启动 / 结束对话
 const handleToggleConversation = async () => {
@@ -259,6 +384,10 @@ const startConversation = async () => {
     }
     rtcEngine.value = engine
 
+    // 注册音频属性报告回调（用于静音检测）
+    console.log('[静音检测] 注册 onLocalAudioPropertiesReport 回调')
+    engine.on(VERTC.events.onLocalAudioPropertiesReport, handleAudioPropertiesReport)
+
     // 3. 加入房间
     statusMessage.value = '正在加入房间...'
     await engine.joinRoom(
@@ -272,11 +401,15 @@ const startConversation = async () => {
       }
     )
 
-    // 4. 启动本地音频
+    // 4. 启用音频属性报告（必须在 startAudioCapture 之前调用）
+    console.log('[静音检测] 启用音频属性报告，间隔: 300ms')
+    engine.enableAudioPropertiesReport({ interval: 300 })
+
+    // 5. 启动本地音频
     statusMessage.value = '正在启动本地麦克风...'
     await engine.startAudioCapture()
 
-    // 5. 启动屏幕共享（如果支持）
+    // 6. 启动屏幕共享（如果支持）
     try {
       statusMessage.value = '正在启动屏幕共享...'
       await startScreenShare()
@@ -284,7 +417,7 @@ const startConversation = async () => {
       console.warn('屏幕共享启动失败，将仅启用语音对话。', err)
     }
 
-    // 6. 通知后端启动 AI 语音对话
+    // 7. 通知后端启动 AI 语音对话
     statusMessage.value = '正在唤醒 AI 导师...'
     console.log('启动 AIGC 对话，RoomId:', roomId.value)
     await apiService.startVoiceChat(apiKey, currentScene.value.scene.id, roomId.value)
@@ -307,6 +440,9 @@ const startConversation = async () => {
 // 结束对话：StopVoiceChat → 清理 RTC
 const stopConversation = async () => {
   if (!isConnected.value) return
+
+  // 重置静音检测定时器
+  resetSilenceTimer()
 
   const apiKey = apiKeyManager.getApiKey()
 
@@ -418,6 +554,11 @@ const safeCleanupRtc = async () => {
 }
 
 onBeforeUnmount(async () => {
+  // 移除页面关闭监听器
+  window.removeEventListener('pagehide', handlePageHide)
+  // 重置静音检测定时器
+  resetSilenceTimer()
+
   if (isConnected.value) {
     await stopConversation()
   } else {
@@ -610,6 +751,44 @@ onBeforeUnmount(async () => {
 
 .top-space {
   margin-top: 12px;
+}
+
+/* 静音警告样式 */
+.silence-warning {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  margin-top: 14px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border: 1px solid #f59e0b;
+  color: #92400e;
+  font-size: 14px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.silence-warning .warning-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #f59e0b;
+  color: #ffffff;
+  font-weight: bold;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 @media (max-width: 640px) {

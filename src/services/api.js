@@ -76,7 +76,9 @@ export const apiService = {
   // 验证 API-Key 是否可用：只要 getScenes 能返回正常结果即可
   async validateApiKey(apiKey) {
     try {
-      await this.getScenes(apiKey)
+      // 使用临时 RoomId 进行验证
+      const tempRoomId = `validate_${Date.now()}`
+      await this.getScenes(apiKey, null, tempRoomId)
       return { valid: true }
     } catch (err) {
       return {
@@ -88,7 +90,10 @@ export const apiService = {
 
   // 启动语音对话
   async startVoiceChat(apiKey, sceneId, roomId) {
-    const body = { SceneID: sceneId }
+    const body = {
+      SceneID: sceneId,
+      EnableStatusMonitor: true  // 启用状态监控
+    }
     if (roomId) {
       body.inputParams = { RoomId: roomId }
     }
