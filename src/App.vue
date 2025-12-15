@@ -441,8 +441,12 @@ const startConversation = async () => {
 const stopConversation = async () => {
   if (!isConnected.value) return
 
+  // 立即标记为未连接，防止回调继续触发静音检测
+  isConnected.value = false
+
   // 重置静音检测定时器
   resetSilenceTimer()
+  console.log('[静音检测] 对话结束，已停止静音检测')
 
   const apiKey = apiKeyManager.getApiKey()
 
@@ -462,7 +466,6 @@ const stopConversation = async () => {
 
     await safeCleanupRtc()
 
-    isConnected.value = false
     currentScene.value = null
     statusMessage.value = '已结束 AI 导师对话。'
   } catch (err) {
